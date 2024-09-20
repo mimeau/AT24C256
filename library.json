@@ -1,0 +1,26 @@
+{
+    "name": "AT24C256",
+    "version": "1.0.0",
+    "description": "A library to use Atmel AT24C256 EEPROM chips",
+    "keywords": "eeprom, at24c, at24c256, i2c",
+    "repository":
+    {
+      "type": "git",
+      "url": "https://github.com/mimeau/at24c256.git"
+    },
+    "authors":
+    [
+      {
+        "name": "Corentin Mimeau",
+        "email": "corentin@mimeau.fr",
+        "url": "https://mimeau.fr",
+        "maintainer": true
+      }
+    ],
+    "license": "GNU LGPLv3",
+    "homepage": "",
+    "dependencies": {
+    },
+    "frameworks": "espidf",
+    "platforms": "espressif32"
+  }
