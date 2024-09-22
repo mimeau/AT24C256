@@ -213,6 +213,16 @@ void test_AT24C256_read_write_arbitrary_type()
 
     S s2 = at24256.read<S>(0x10A).value();
     TEST_ASSERT_EQUAL_MEMORY(&s1, &s2, sizeof(S));
+
+    std::vector<float> vec1{59.6, 12.44, 126.9, 0.00023};
+    TEST_ASSERT_TRUE(at24256.write(0x20A, vec1));
+
+    auto vec2 = at24256.read<std::array<float, 4>>(0x20A).value();
+
+    for(size_t i=0; i<4; ++i)
+    {
+        TEST_ASSERT_EQUAL_FLOAT(vec1[i], vec2[i]);
+    }
 }
 
 void app_main(void)
