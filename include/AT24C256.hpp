@@ -73,14 +73,14 @@ public:
     {
         if constexpr(safe_mode)
         {
-            if(size > std::ranges::size(range))
+            if(count > std::ranges::size(range))
             {
-                ESP_LOGE("AT24C256::write", "[0x%02x] - Given size (%zu) is greater than range's size (%zu)", _address, size, std::ranges::size(range));
+                ESP_LOGE("AT24C256::write", "[0x%02x] - Given size (%zu) is greater than range size (%zu)", _address, count, std::ranges::size(range));
                 return false;
             }
         }
 
-        return write(address, (uint8_t*) std::ranges::data(range), size * sizeof(std::ranges::range_value_t<R>));
+        return write(address, (uint8_t*) std::ranges::data(range), count * sizeof(std::ranges::range_value_t<R>));
     }
 
     /**
@@ -153,6 +153,15 @@ public:
     requires std::ranges::contiguous_range<R> 
     bool read(uint16_t address, R& range, size_t count) const
     {
+        if constexpr(safe_mode)
+        {
+            if(count > std::ranges::size(range))
+            {
+                ESP_LOGE("AT24C256::read", "[0x%02x] - Given size (%zu) is greater than range size (%zu)", _address, count, std::ranges::size(range));
+                return false;
+            }
+        }
+
         return read(address, std::ranges::data(range), count * sizeof(std::ranges::range_value_t<R>));
     }
 
