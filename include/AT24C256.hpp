@@ -1,13 +1,10 @@
 #pragma once
 
 #include <cstddef>
-#include <string>
-#include <vector>
 #include <optional>
 #include <ranges>
 
 #include "driver/i2c_master.h"
-
 #include "esp_log.h"
 
 /**

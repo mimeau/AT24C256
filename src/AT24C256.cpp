@@ -1,6 +1,7 @@
 #include "AT24C256.hpp"
 
 #include <array>
+#include <vector>
 #include "freertos/FreeRTOS.h"
 
 template<bool safe_mode>
