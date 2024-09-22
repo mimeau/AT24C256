@@ -1,0 +1,36 @@
+name: PlatformIO CI
+
+  on:
+    push:
+      branches:
+      - main
+      - release/*
+    pull_request:
+      branches:
+      - main
+
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      strategy:
+        matrix:
+          files: [test/test_AT24C256.cpp, examples/main.cpp]
+
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/cache@v4
+          with:
+            path: |
+              ~/.cache/pip
+              ~/.platformio/.cache
+            key: ${{ runner.os }}-pio
+        - uses: actions/setup-python@v5
+          with:
+            python-version: '3.11'
+        - name: Install PlatformIO Core
+          run: pip install --upgrade platformio
+
+        - name: Build tests & examples
+          run: pio ci --board=esp32dev -c test/platformio.ini -l include/* -l src/*
+          env:
+            PLATFORMIO_CI_SRC: ${{ matrix.files }}
