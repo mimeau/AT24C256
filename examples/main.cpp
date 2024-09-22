@@ -13,7 +13,6 @@
 #include "driver/i2c_master.h"
 
 #include "AT24C256.hpp"
-#include "I2CMemCard.hpp"
 
 extern "C" {
     void app_main(void);
@@ -25,6 +24,7 @@ void app_main(void)
 {
     esp_log_level_set("*", ESP_LOG_DEBUG); // Enable debug logs to see operation details
 
+    // Setup I2C bus
     i2c_master_bus_config_t i2c_mst_config = {
         .i2c_port = -1,
         .sda_io_num = GPIO_NUM_21,
@@ -37,31 +37,46 @@ void app_main(void)
     };
 
     i2c_master_bus_handle_t bus_handle;
-
     ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
 
-    AT24C256 at24256(bus_handle, 0x50);
+    {
+        AT24C256 at24256(bus_handle, 0x51); // Equivalent to AT24C256<true> (safe_mode enabled)
+        // AT24C256 at24256<false>(bus_handle, 0x51); // safe_mode disabled
 
-    // Single byte operations
-    bool okay = at24256.write(0x0212, 42);
+        if(at24256.write(0x0212, 42)) // Write one byte at specified address
+        {
+            // Read back what we wrote
+            std::optional<uint8_t> value = at24256.read(0x0212);    // safe_mode enabled
+            // uint8_t value = at24256.read(0x0212);                // safe_mode disabled
+        }
 
-    std::expected<uint8_t, bool> expected_read_result = at24256.read(0x0212);
+        // Write multiple bytes
+        at24256.write(0x017D, std::vector<uint8_t>{0x10, 0x11, 0x12}); // Accepts any contiguous and sized std::ranges, like std::vector
 
-    uint8_t read_result = at24256.read(0x0212); // If you don't care about error check
+        at24256.write(0x017D, std::vector<uint8_t>{0x10, 0x11, 0x12}, 2); // Write only the first two elements
 
-    // Multi bytes operations
-    std::array<uint8_t, 5> data{ 1, 2, 3, 4, 5 };
+        // at24256.write(0x017D, std::vector<uint8_t>{0x10, 0x11, 0x12}, 5); // Error, size is too big
 
-    bool res_write = at24256.write(0x017D, data.data(), data.size()); // std::vector<uint8_t> overload also provided
+        // Write C-style array directly
+        uint8_t data[3] = {0x10, 0x11, 0x12};
+        at24256.write(0x017D, data, 3);
 
-    std::vector<uint8_t> result = at24256.read(0x017D, 5).value(); // If you don't care about error check
+        // or through an std::span wrapper
+        at24256.write(0x017D, std::span(data));
 
-    // or
+        // Read data into arbitrary contiguous sized container (must be able to construct the container using T t(size) where size is the amount of bytes to read)
+        auto buffer = at24256.read<std::vector<uint8_t>>(0x017D, 3); // safe_mode enabled: returns an std::optional<std::vector<uint8_t>>
+                                                                    // safe_mode disabled: returns an std::vector<uint8_t>
 
-    uint8_t raw_result[5];
-    at24256.read(0x017D, raw_result, 5);
+        // Read directly into the buffer
+        std::array<uint8_t, 3> array;
+        bool result = at24256.read(0x017D, array, 3);   // return success or failure
 
-    ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle));
+        // or, if the container is already at the right size, simply
+        bool result = at24256.read(0x017D, array);
+    }
+
+    ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle)); // Make sure to delete the I2C bus after all at24256 objects went out of scope / were deleted
 
     xTaskCreate(vTaskLoop, "forever_loop", 2048, NULL, 5, NULL);
 }
