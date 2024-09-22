@@ -73,7 +73,7 @@ void app_main(void)
         bool result = at24256.read(0x017D, array, 3);   // return success or failure
 
         // or, if the container is already at the right size, simply
-        bool result = at24256.read(0x017D, array);
+        result = at24256.read(0x017D, array);
     }
 
     ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle)); // Make sure to delete the I2C bus after all at24256 objects went out of scope / were deleted
