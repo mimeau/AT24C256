@@ -74,6 +74,28 @@ void app_main(void)
 
         // or, if the container is already at the right size, simply
         result = at24256.read(0x017D, array);
+
+        // Read / write any kind of data
+        at24256.write(0x05A, 5.0f); // Write a float
+
+        float f = at24256.read<float>(0x05A).value(); // Read a float, returns an std::optional<float> because safe_mode is on
+        // float f = at24256.read<float>(0x05A); when safe_mode is off
+
+        struct S
+        {
+            int a;
+            double b;
+            long c;
+            bool d;
+            char s[5];
+        };
+
+        S s1{10, 42.356, 1345898, true, "abcd"};
+
+        at24256.write(0x10A, s1); // Write a whole struct (including its potential padding)
+
+        S s2 = at24256.read<S>(0x10A).value();
+        // S s2 = at24256.read<S>(0x10A); when safe_mode is off
     }
 
     ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle)); // Make sure to delete the I2C bus after all at24256 objects went out of scope / were deleted

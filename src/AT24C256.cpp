@@ -58,7 +58,7 @@ bool AT24C256<safe_mode>::write(uint16_t address, uint8_t byte) const
     {
         if(address > MEMORY_SIZE-1)
         {
-            ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big", _address, address);
+            ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%04x is too big", _address, address);
             return false;
         }
     }

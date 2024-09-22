@@ -1,4 +1,6 @@
+#define UNITY_INCLUDE_DOUBLE
 #include <unity.h>
+#include <array>
 #include <vector>
 
 #include "esp_log.h"
@@ -186,6 +188,33 @@ void test_AT24C256_multi_read_write_edge()
     TEST_ASSERT_TRUE(res_write);
 }
 
+void test_AT24C256_read_write_arbitrary_type()
+{
+    AT24C256 at24256(g_bus_handle, 0x51);
+
+    TEST_ASSERT_TRUE(at24256.write(0x05A, 5.0f));
+    TEST_ASSERT_EQUAL_FLOAT(5.0f, at24256.read<float>(0x05A).value());
+
+    TEST_ASSERT_TRUE(at24256.write(0x06E, 4800.84));
+    TEST_ASSERT_EQUAL_DOUBLE(4800.84, at24256.read<double>(0x06E).value());
+
+    struct S
+    {
+        int a;
+        double b;
+        long c;
+        bool d;
+        char s[5];
+    };
+
+    S s1{10, 42.356, 1345898, true, "abcd"};
+
+    TEST_ASSERT_TRUE(at24256.write(0x10A, s1));
+
+    S s2 = at24256.read<S>(0x10A).value();
+    TEST_ASSERT_EQUAL_MEMORY(&s1, &s2, sizeof(S));
+}
+
 void app_main(void)
 {
     esp_log_level_set("*", ESP_LOG_DEBUG);
@@ -196,6 +225,7 @@ void app_main(void)
     RUN_TEST(test_AT24C256_multi_read_write);
     RUN_TEST(test_AT24C256_multi_read_write_big);
     RUN_TEST(test_AT24C256_multi_read_write_edge);
+    RUN_TEST(test_AT24C256_read_write_arbitrary_type);
 
     UNITY_END();
 }

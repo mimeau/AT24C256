@@ -55,6 +55,15 @@ public:
     bool write(uint16_t address, uint8_t* buffer, uint16_t size) const;
 
     /**
+     * Write arbitrary data
+     */
+    template<typename T>
+    bool write(uint16_t address, const T& value) const
+    {
+        return write(address, (uint8_t*) &value, sizeof(T));
+    }
+
+    /**
      * Write a sequence of bytes anywhere on the chip,
      * from a contiguous and sized arbitrary range
      * 
@@ -117,6 +126,25 @@ public:
      * it loops back to address 0x0000
      */
     bool read(uint16_t address, uint8_t* buffer, size_t size) const;
+
+    /**
+     * Read arbitrary data
+     */
+    template<typename T>
+    auto read(uint16_t address) const -> typename std::conditional<safe_mode, std::optional<T>, T>::type
+    {
+        T value;
+
+        bool result = read(address, (uint8_t*) &value, sizeof(T));
+
+        if constexpr (safe_mode) 
+        {
+            if(!result)
+                return std::nullopt;
+        }
+
+        return value;
+    }
 
     /**
      * Construct a container of type R that must represent
