@@ -1,6 +1,6 @@
 {
     "name": "AT24C256",
-    "version": "1.0.0",
+    "version": "1.1.1",
     "description": "A library to use Atmel AT24C256 EEPROM chips",
     "keywords": "eeprom, at24c, at24c256, i2c",
     "repository":
