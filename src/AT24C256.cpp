@@ -1,10 +1,10 @@
 #include "AT24C256.hpp"
 
 #include <array>
-#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 
-AT24C256::AT24C256(i2c_master_bus_handle_t bus, uint8_t address) : _address(address)
+template<bool safe_mode>
+AT24C256<safe_mode>::AT24C256(i2c_master_bus_handle_t bus, uint8_t address) : _address(address)
 {
     _dev_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
@@ -18,7 +18,8 @@ AT24C256::AT24C256(i2c_master_bus_handle_t bus, uint8_t address) : _address(addr
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus, &_dev_cfg, &_dev_handle));
 }
 
-AT24C256::AT24C256(AT24C256 &&other)
+template<bool safe_mode>
+AT24C256<safe_mode>::AT24C256(AT24C256<safe_mode> &&other)
 {
     _address = other._address;
     other._address = 0;
@@ -27,7 +28,8 @@ AT24C256::AT24C256(AT24C256 &&other)
     other._dev_handle = nullptr;
 }
 
-AT24C256::~AT24C256()
+template<bool safe_mode>
+AT24C256<safe_mode>::~AT24C256()
 {
     if(_dev_handle)
     {
@@ -36,12 +38,28 @@ AT24C256::~AT24C256()
     } 
 }
 
-bool AT24C256::write(uint16_t address, uint8_t byte) const
+template<bool safe_mode>
+AT24C256<safe_mode>& AT24C256<safe_mode>::operator=(AT24C256<safe_mode> &&other)
 {
-    if(address > MEMORY_SIZE-1)
+    _address = other._address;
+    other._address = 0;
+
+    _dev_handle = other._dev_handle;
+    other._dev_handle = nullptr;
+
+    return *this;
+}
+
+template<bool safe_mode>
+bool AT24C256<safe_mode>::write(uint16_t address, uint8_t byte) const
+{
+    if constexpr (safe_mode)
     {
-        ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big", _address, address);
-        return false;
+        if(address > MEMORY_SIZE-1)
+        {
+            ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big", _address, address);
+            return false;
+        }
     }
 
     std::array<uint8_t, 3> payload{
@@ -64,16 +82,23 @@ bool AT24C256::write(uint16_t address, uint8_t byte) const
     return true;
 }
 
-bool AT24C256::write(uint16_t address, uint8_t* buffer, uint16_t size) const
+template<bool safe_mode>
+bool AT24C256<safe_mode>::write(uint16_t address, uint8_t* buffer, uint16_t size) const
 {
-    if((address+size) > MEMORY_SIZE-1)
+    if constexpr (safe_mode)
     {
-        ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big (max address: 0x%02x)", _address, address, MEMORY_SIZE-1);
-        return false;
+        if((address+size) > MEMORY_SIZE-1)
+        {
+            ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big (max address: 0x%02x)", _address, address, MEMORY_SIZE-1);
+            return false;
+        }
     }
 
+    ESP_LOGD("AT24C256::write", "[0x%02x] - Size: %u", _address, size);
+    ESP_LOG_BUFFER_HEXDUMP("AT24C256::write", buffer, size, ESP_LOG_DEBUG);
+
     uint16_t start_page = address >> 6;
-    uint16_t end_page = (address+size) >> 6;
+    uint16_t end_page = (address+size-1) >> 6;
 
     uint16_t page_count = (end_page - start_page) + 1;
 
@@ -107,18 +132,22 @@ bool AT24C256::write(uint16_t address, uint8_t* buffer, uint16_t size) const
     return true;
 }
 
-bool AT24C256::write_page(uint16_t address, uint8_t* buffer, uint16_t size) const
+template<bool safe_mode>
+bool AT24C256<safe_mode>::write_page(uint16_t address, uint8_t* buffer, uint16_t size) const
 {
-    if(address & 0x8000) [[unlikely]]
+    if constexpr (safe_mode)
     {
-        ESP_LOGE("AT24C256::write_page", "[0x%02x] - Address 0x%02x is too big", _address, address);
-        return false;
-    }
+        if(address & 0x8000) [[unlikely]]
+        {
+            ESP_LOGE("AT24C256::write_page", "[0x%02x] - Address 0x%02x is too big", _address, address);
+            return false;
+        }
 
-    if( (address >> 6) != ((address+size-1) >> 6)) [[unlikely]]
-    {
-        ESP_LOGE("AT24C256::write_page", "[0x%02x] - Write overlap page border", _address);
-        return false;
+        if( (address >> 6) != ((address+size-1) >> 6)) [[unlikely]]
+        {
+            ESP_LOGE("AT24C256::write_page", "[0x%02x] - Write overlap page border", _address);
+            return false;
+        }
     }
 
     std::vector<uint8_t> payload(2+size);
@@ -141,17 +170,16 @@ bool AT24C256::write_page(uint16_t address, uint8_t* buffer, uint16_t size) cons
     return true;
 }
 
-bool AT24C256::write(uint16_t address, std::vector<uint8_t> bytes) const
+template<bool safe_mode>
+auto AT24C256<safe_mode>::read(uint16_t address) const -> typename std::conditional<safe_mode, std::optional<uint8_t>, uint8_t>::type
 {
-    return write(address, bytes.data(), bytes.size());
-}
-
-std::expected<uint8_t, bool> AT24C256::read(uint16_t address) const
-{
-    if(address & 0x8000)
+    if constexpr (safe_mode)
     {
-        ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big", _address, address);
-        return std::unexpected(false);
+        if(address & 0x8000)
+        {
+            ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big", _address, address);
+            return std::nullopt;
+        }
     }
 
     uint8_t data = 0;
@@ -161,11 +189,15 @@ std::expected<uint8_t, bool> AT24C256::read(uint16_t address) const
         (uint8_t)address,                   // Second word address
     };
 
-    esp_err_t err = i2c_master_transmit_receive(_dev_handle, payload.data(), payload.size(), &data, 1, -1);
-    if (err != ESP_OK) 
+    [[maybe_unused]] esp_err_t err = i2c_master_transmit_receive(_dev_handle, payload.data(), payload.size(), &data, 1, -1);
+
+    if constexpr (safe_mode)
     {
-        ESP_LOGD("AT24C256::read", "[0x%02x] - Read failed @ 0x%04x: [%u] %s", _address, address, err, esp_err_to_name(err));
-        return std::unexpected(false);
+        if (err != ESP_OK) 
+        {
+            ESP_LOGD("AT24C256::read", "[0x%02x] - Read failed @ 0x%04x: [%u] %s", _address, address, err, esp_err_to_name(err));
+            return std::nullopt;
+        }
     }
 
     ESP_LOGD("AT24C256::read", "[0x%02x] - Read byte 0x%02x @ 0x%04x", _address, data, address);
@@ -174,27 +206,16 @@ std::expected<uint8_t, bool> AT24C256::read(uint16_t address) const
     return data;    
 }
 
-uint8_t AT24C256::read(uint16_t address)
+template<bool safe_mode>
+bool AT24C256<safe_mode>::read(uint16_t address, uint8_t* buffer, size_t size) const
 {
-    uint8_t data = 0;
-
-    std::array<uint8_t, 2> payload{
-        (uint8_t)(address >> 8),            // First word address
-        (uint8_t)address,                   // Second word address
-    };
-
-    i2c_master_transmit_receive(_dev_handle, payload.data(), payload.size(), &data, 1, -1);
-    vTaskDelay(25 / portTICK_PERIOD_MS);  // 25 milliseconds
-
-    return data;   
-}
-
-bool AT24C256::read(uint16_t address, uint8_t* buffer, uint8_t size) const
-{
-    if(address & 0x8000)
+    if constexpr (safe_mode)
     {
-        ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big", _address, address);
-        return false;
+        if(address & 0x8000)
+        {
+            ESP_LOGE("AT24C256::write", "[0x%02x] - Address 0x%02x is too big", _address, address);
+            return false;
+        }
     }
 
     std::array<uint8_t, 2> payload{
@@ -215,12 +236,5 @@ bool AT24C256::read(uint16_t address, uint8_t* buffer, uint8_t size) const
     return true;
 }
 
-std::expected<std::vector<uint8_t>, bool> AT24C256::read(uint16_t address, uint8_t size) const
-{
-    std::vector<uint8_t> buffer(size);
-    bool result = read(address, buffer.data(), buffer.size());
-
-    if(result) return buffer;
-    
-    return std::unexpected(false);
-}
+template class AT24C256<true>;
+template class AT24C256<false>;
