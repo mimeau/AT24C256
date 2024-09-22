@@ -1,5 +1,7 @@
 # AT24C256
 
+[![PlatformIO Registry](https://badges.registry.platformio.org/packages/mimeau/library/AT24C256.svg)](https://registry.platformio.org/libraries/mimeau/AT24C256)
+
 This small C++ library provides read/write operations on AT24C256 EEPROM chip using the Espressif IDF and its I2C lib.
 
 It aims to provide easy to use C++ interface and comprehensive logging. It does not aim to be as performant as possible.
