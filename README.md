@@ -23,9 +23,139 @@ Features:
 
 To create an AT24C256 object, user must first create a valid I2C bus handle from ESPIDF framework. Then, this handle and the AT24C256 chip address is given to the constructor.
 
-AT24C256 objects can be instanciated with safe_mode enable (by default) or disable using a boolean template parameter. When safe_mode is enable, additional safety checks are performed, and additional logging is outputted. Some function will also return an std::optional instead of directly the result. 
+AT24C256 objects can be instanciated with safe_mode enable (by default) or disable using a boolean template parameter. When safe_mode is enable, additional safety checks are performed, and additional logging is outputted. Some function will also return an std::optional instead of directly the result.
 
-# Usage
+## Interface
+
+### Constructors
+
+```cpp 
+template<bool safe_mode = true>
+AT24C256::AT24C256(i2c_master_bus_handle_t bus, uint8_t address);
+```
+Takes an i2c bus handle constructed using ESP IDF I2C library `driver/i2c_master.h`, and the device physical I2C address. For AT24C256 chips, this address should be between 0x50 and 0x57.
+
+Safe mode is enabled by default and adds additional checks & logs.
+
+```cpp 
+AT24C256(const AT24C256 &other) = delete;
+AT24C256(AT24C256 &&other);
+~AT24C256();
+
+AT24C256& operator=(const AT24C256 &other) = delete;
+AT24C256& operator=(AT24C256 &&other);
+```
+
+AT24C256 objects can be moved, but can't be copied. Internally, each object holds its `i2c_master_dev_handle_t`, a handle that needs to be freed only once. To prevent use-after-free or multiple free issues, copy is disabled for the object.
+
+### Write operations
+
+```cpp 
+bool AT24C256::write(uint16_t address, uint8_t byte) const;
+bool AT24C256::write(uint16_t address, uint8_t* buffer, uint16_t size) const;
+```
+
+Write a byte or an array of bytes at specified address. Valid addresses range from 0x0000 to 0x7FFF.
+
+```cpp 
+template<typename T> requires (!std::ranges::contiguous_range<T>) 
+bool write(uint16_t address, const T& value) const;
+```
+
+Write arbitrary data at specified address. If `T` is an object, it writes a shallow copy including the padding bytes that may be present. `T` must be an std::contiguous_range, as there is special overloads for this kind of types, see below.   
+
+```cpp 
+template<typename R>
+    requires std::ranges::contiguous_range<R> 
+        && std::ranges::sized_range<R>
+bool write(uint16_t address, R&& range, size_t count) const;
+
+template<typename R>
+    requires std::ranges::contiguous_range<R> 
+        && std::ranges::sized_range<R>
+bool write(uint16_t address, R&& range) const;
+```
+
+These overloads provide convenient ways to write data from any contiguous and sized range such as `std::vector`, `std::array`, `std::span`, etc. C.f. usage examples below. Return success/error.
+
+```cpp 
+bool write_page(uint16_t address, uint8_t* buffer, uint16_t size) const;
+```
+
+Memory on AT24C256 chips is segmented in 512 pages of 64 bytes each. A single write OP (as understood by the chip) is restricted to a single page (and will loop back to the beginning of the page if the write continues). This function is mostly used by other write functions that will distribute the write on multiple pages if the data is big enough to warrant it.
+
+Return success/error.
+
+### Read operations
+
+```cpp
+auto read(uint16_t address) const -> typename std::conditional<safe_mode, std::optional<uint8_t>, uint8_t>::type;
+```
+
+Read a single byte at specified address. If safe_mode is enabled, this function returns an `std::optional<uint8_t>` that is empty on failures. If safe_mode is disabled, returns the byte directly, without any guarentees that it contains the correct value.
+
+```cpp
+bool read(uint16_t address, uint8_t* buffer, size_t size) const;
+```
+
+Read multiples bytes at specified address, into a C-style array. Return success/error.
+
+```cpp
+template<typename T>
+    requires (!std::ranges::contiguous_range<T>) 
+auto read(uint16_t address) const -> typename std::conditional<safe_mode, std::optional<T>, T>::type
+```
+
+Read arbitrary data at specified address. As with its equivalent `write()` function, `T` must be an std::contiguous_range, as there is special overloads for this kind of types, see below.
+
+```cpp
+template<typename R>
+requires std::ranges::contiguous_range<R> 
+auto read(uint16_t address, size_t count) const -> typename std::conditional<safe_mode, std::optional<R>, R>::type;
+
+template<typename R>
+requires std::ranges::contiguous_range<R> 
+        && std::ranges::sized_range<R>
+auto read(uint16_t address) const -> typename std::conditional<safe_mode, std::optional<R>, R>::type;
+```
+
+Construct a container of type `R` that must be an `std::ranges::contiguous_range` (and an `std::ranges::sized_range` in the second case), and will read \<count> bytes at the specified address (first case) or will read as many bytes as the container holds (second case). Works with arbitrary elements type (`uint8_t`, `float`, structs, ...).
+
+Note that the count parameter designates an amount of elements. The actual amount of bytes read will be equal to `count * sizeof(<element type>)`. 
+
+With safe_mode enabled, functions will return an std::optional<R>.
+
+Allows to call:
+
+```cpp
+auto array = at24256.read<std::array<float, 4>>(0x20A); // No need to indicate a count if we want to fill the whole array
+
+auto vector = at24256.read<std::vector<float>>(0x20A, 4); // Need to indicate a count with std::vector or else it will read 0 bytes (empty default-constructed vector)
+```
+
+In these examples, `4 * sizeof(float)` = 16 bytes are read.
+
+```cpp
+template<typename R>
+requires std::ranges::contiguous_range<R>
+        && std::ranges::sized_range<R> 
+bool read(uint16_t address, R& range, size_t count) const;
+
+template<typename R>
+requires std::ranges::contiguous_range<R> 
+        && std::ranges::sized_range<R>
+bool read(uint16_t address, R& range) const;
+```
+
+Same as above, except it reads into the given container directly, and returns a boolean indicating success or failure.
+
+```cpp
+std::array<uint8_t, 3> array;
+bool result = at24256.read(0x017D, array, 3);
+// or at24256.read(0x017D, array);
+```
+
+## Usage
 ```cpp
 // Setup I2C bus
 
@@ -111,3 +241,7 @@ ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
 ESP_ERROR_CHECK(i2c_del_master_bus(bus_handle)); // Make sure to delete the I2C bus after all at24256 objects went out of scope / were deleted
 
 ```
+
+## Limitations
+
+Objects calls functions such as `i2c_master_transmit()` and `i2c_master_transmit_receive()` which are **not thread safe**.

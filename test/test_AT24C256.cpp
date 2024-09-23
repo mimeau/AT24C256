@@ -223,6 +223,7 @@ void test_AT24C256_read_write_arbitrary_type()
     {
         TEST_ASSERT_EQUAL_FLOAT(vec1[i], vec2[i]);
     }
+
 }
 
 void app_main(void)

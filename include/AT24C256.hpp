@@ -58,6 +58,7 @@ public:
      * Write arbitrary data
      */
     template<typename T>
+    requires (!std::ranges::contiguous_range<T>) 
     bool write(uint16_t address, const T& value) const
     {
         return write(address, (uint8_t*) &value, sizeof(T));
@@ -131,6 +132,7 @@ public:
      * Read arbitrary data
      */
     template<typename T>
+    requires (!std::ranges::contiguous_range<T>) 
     auto read(uint16_t address) const -> typename std::conditional<safe_mode, std::optional<T>, T>::type
     {
         T value;
@@ -154,11 +156,33 @@ public:
      */
     template<typename R>
     requires std::ranges::contiguous_range<R> 
-        && std::ranges::sized_range<R>
     auto read(uint16_t address, size_t count) const -> typename std::conditional<safe_mode, std::optional<R>, R>::type
     {
         R buffer(count);
-        bool result = read(address, std::ranges::data(buffer), std::ranges::size(buffer) * sizeof(std::ranges::range_value_t<R>));
+        bool result = read(address, (uint8_t*) std::ranges::data(buffer), count * sizeof(std::ranges::range_value_t<R>));
+        
+        if constexpr (safe_mode) 
+        {
+            if(!result)
+                return std::nullopt;
+        }
+
+        return buffer;
+    }
+
+    /**
+     * Construct a container of type R that must represent
+     * a contiguous and sized range, read <count> elements
+     * into the container and return it. The actual amount 
+     * of bytes read will depend on the element's size.
+     */
+    template<typename R>
+    requires std::ranges::contiguous_range<R> 
+        && std::ranges::sized_range<R>
+    auto read(uint16_t address) const -> typename std::conditional<safe_mode, std::optional<R>, R>::type
+    {
+        R buffer;
+        bool result = read(address, (uint8_t*) std::ranges::data(buffer), std::ranges::size(buffer) * sizeof(std::ranges::range_value_t<R>));
         
         if constexpr (safe_mode) 
         {
@@ -175,7 +199,8 @@ public:
      * the element size.
      */
     template<typename R>
-    requires std::ranges::contiguous_range<R> 
+    requires std::ranges::contiguous_range<R>
+        && std::ranges::sized_range<R> 
     bool read(uint16_t address, R& range, size_t count) const
     {
         if constexpr(safe_mode)
@@ -187,7 +212,7 @@ public:
             }
         }
 
-        return read(address, std::ranges::data(range), count * sizeof(std::ranges::range_value_t<R>));
+        return read(address, (uint8_t*) std::ranges::data(range), count * sizeof(std::ranges::range_value_t<R>));
     }
 
     /**
@@ -200,7 +225,7 @@ public:
         && std::ranges::sized_range<R>
     bool read(uint16_t address, R& range) const
     {
-        return read(address, std::ranges::data(range), std::ranges::size(range) * sizeof(std::ranges::range_value_t<R>));
+        return read(address, (uint8_t*) std::ranges::data(range), std::ranges::size(range) * sizeof(std::ranges::range_value_t<R>));
     }
 
 
